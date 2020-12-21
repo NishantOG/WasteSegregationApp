@@ -1,53 +1,218 @@
 import 'dart:io';
-
-import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'package:flutter/cupertino.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
+import 'package:image_cropper/image_cropper.dart';
+import 'package:flutter/material.dart';
 
-void main() => runApp(MyApp());
+void main() => runApp(Home());
 
-class MyApp extends StatelessWidget {
+class Home extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      home: MyHomePage(),
+      debugShowCheckedModeBanner: false,
+      initialRoute: '/',
+      routes: {
+        '/': (context) => CameraWidget(),
+        '/upload': (context) => Info(),
+      },
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
+class CameraWidget extends StatefulWidget {
   @override
-  _MyHomePageState createState() => _MyHomePageState();
+  _CameraWidgetState createState() => _CameraWidgetState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  File _image;
-  final picker = ImagePicker();
+class _CameraWidgetState extends State<CameraWidget> {
+  File imageFile;
+  String status =
+      'Click 👆 to select image of the waste then, Click 👇 to upload the image and get creative ideas to minimize wastes.';
 
-  Future getImage() async {
-    final pickedFile = await picker.getImage(source: ImageSource.camera);
-
+  setStatus(String message) {
     setState(() {
-      if (pickedFile != null) {
-        _image = File(pickedFile.path);
-      } else {
-        print('No image selected.');
-      }
+      status = message;
     });
+  }
+
+  _cropImage(filePath) async {
+    try {
+      File croppedImage = await ImageCropper.cropImage(
+          sourcePath: filePath,
+          maxHeight: 800,
+          maxWidth: 800,
+          aspectRatio: CropAspectRatio(ratioX: 1, ratioY: 1));
+      if (croppedImage != null) {
+        imageFile = croppedImage;
+        setState(() {});
+      }
+    } catch (err) {
+      setStatus('Not able to crop the image due to error $err');
+      print('Error Croping the file: $err');
+    }
+  }
+
+  chooseImage(String s) async {
+    PickedFile pickedFile;
+    if (s == 'g') {
+      pickedFile = await ImagePicker()
+          .getImage(source: ImageSource.gallery, maxHeight: 800, maxWidth: 800);
+    } else {
+      pickedFile = await ImagePicker()
+          .getImage(source: ImageSource.camera, maxHeight: 800, maxWidth: 800);
+    }
+
+    _cropImage(pickedFile.path);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Image Picker Example'),
+        title: Text('Waste Segregation App'),
+        centerTitle: true,
+        backgroundColor: Colors.green,
       ),
-      body: Center(
-        child: _image == null ? Text('No image selected.') : Image.file(_image),
+      body: Container(
+        padding: EdgeInsets.all(30),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Select an Image',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 18),
+                ),
+                ButtonBar(alignment: MainAxisAlignment.spaceEvenly, children: [
+                  RaisedButton(
+                    color: Colors.green,
+                    onPressed: () => chooseImage('c'),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 10, horizontal: 25),
+                      child: Text(
+                        'Camera',
+                        style: TextStyle(
+                          fontSize: 20,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Text('- or -'),
+                  RaisedButton(
+                    onPressed: () => chooseImage('g'),
+                    color: Colors.green,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 10, horizontal: 25),
+                      child: Text(
+                        'Gallery',
+                        style: TextStyle(
+                          fontSize: 20,
+                        ),
+                      ),
+                    ),
+                  ),
+                ]),
+              ],
+            ),
+            Divider(height: 10),
+            Container(
+              child: (imageFile == null)
+                  ? Text("$status",
+                      style: TextStyle(
+                        fontSize: 20,
+                      ))
+                  : Container(
+                      width: 400,
+                      height: 400,
+                      child: Image.file(imageFile),
+                    ),
+            ),
+            Divider(height: 10),
+            Container(
+              child: imageFile == null
+                  ? Text('')
+                  : RaisedButton(
+                      onPressed: () => setState(() {
+                        imageFile = null;
+                      }),
+                      color: Colors.red,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 10, horizontal: 25),
+                        child: Text(
+                          'Clear',
+                          style: TextStyle(
+                            fontSize: 19,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+            ),
+            RaisedButton(
+              onPressed: () {
+                if (imageFile == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text('Please select an image first.',
+                        style: TextStyle(
+                          fontSize: 16,
+                        )),
+                    backgroundColor: Colors.green,
+                  ));
+                } else {
+                  Navigator.pushNamed(context, '/upload',
+                      arguments: {'image': imageFile});
+                  print('Upload code goes here!');
+                }
+              },
+              color: Colors.white,
+              elevation: 1.5,
+              child: Padding(
+                padding: const EdgeInsets.all(18.0),
+                child: Text(
+                  'Upload Image',
+                  style: TextStyle(
+                    fontSize: 20,
+                    color: Colors.green,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: getImage,
-        tooltip: 'Pick Image',
-        child: Icon(Icons.add_a_photo),
+    );
+  }
+}
+
+class Info extends StatefulWidget {
+  @override
+  _InfoState createState() => _InfoState();
+}
+
+class _InfoState extends State<Info> {
+  Map data = {};
+
+  @override
+  Widget build(BuildContext context) {
+    data = ModalRoute.of(context).settings.arguments;
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Ways to Recycle.'),
+        centerTitle: true,
+      ),
+      body: Container(
+        width: 400,
+        height: 400,
+        child: Image.file(data['image']),
       ),
     );
   }
